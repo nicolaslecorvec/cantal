@@ -1,4 +1,9 @@
+# Ignore Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore specific directories
 geojson_chunks/
+
+# Ignore specific files or types
+*.ipynb
 linregress.py
-Streamlit_map.ipynb
-Untitled.ipynb
