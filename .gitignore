@@ -7,4 +7,3 @@ geojson_chunks/
 # Ignore specific files or types
 *.ipynb
 linregress.py
-linregress_results.geojson
