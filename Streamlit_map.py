@@ -5,35 +5,23 @@ import pandas as pd
 import math
 from geopy.geocoders import Nominatim
 
-@st.cache(allow_output_mutation=True)
+@st.cache_data
 def get_gdf(file_path):
     """Charger les données géospatiales à partir du fichier spécifié."""
     gdf = gpd.read_file(file_path)
     return gdf
 
 def calculate_bounds(gdf):
-    """Calculer les limites du geodataframe pour déterminer le centre de la carte et le niveau de zoom."""
-    bounds = gdf.total_bounds  # Retourne (minx, miny, maxx, maxy)
+    """Calculate the bounds of the geodataframe to determine the map's center."""
+    bounds = gdf.total_bounds  # Returns (minx, miny, maxx, maxy)
     center_lat = (bounds[1] + bounds[3]) / 2
     center_lon = (bounds[0] + bounds[2]) / 2
     return center_lat, center_lon
 
-def calculate_zoom_level(gdf):
-    """Calculate a zoom level based on the extent of the GeoDataFrame."""
-    bounds = gdf.total_bounds
-    # Calculate the diagonal of the bounding box
-    diagonal = math.sqrt((bounds[2] - bounds[0])**2 + (bounds[3] - bounds[1])**2)
-    # This is a heuristic to calculate zoom level based on diagonal length
-    # You might need to adjust the multiplier based on your specific dataset
-    return max(12 - math.log(diagonal) * 0.5, 1)
-
-def create_interactive_map(gdf, lat, lon, zoom, color_range):
+def create_interactive_map(gdf, color_range):
     """Créer une carte interactive avec la plage de couleurs personnalisable."""
-    if lat is None or lon is None:
-        center_lat, center_lon = calculate_bounds(gdf)
-        zoom = calculate_zoom_level(gdf)
-    else:
-        center_lat, center_lon = lat, lon
+    # Calculate the center of the map
+    center_lat, center_lon = calculate_bounds(gdf)
 
     fig = px.scatter_mapbox(gdf.reset_index(),
                             lat="latitude",
@@ -43,24 +31,29 @@ def create_interactive_map(gdf, lat, lon, zoom, color_range):
                             range_color=color_range,  # Updated to use the custom range
                             hover_name=gdf.index,
                             hover_data={"index": True, "slope": True},
-                            zoom=zoom,
                             center={"lat": center_lat, "lon": center_lon},
                             height=300)
-    fig.update_layout(mapbox_style="open-street-map", margin={"r":0, "t":0, "l":0, "b":0})
+    fig.update_layout(mapbox_style="open-street-map")
+    fig.update_layout(margin={"r":0, "t":0, "l":0, "b":0})
     fig.update_traces(marker=dict(size=10))
 
     return fig
 
 def geocode_address(address):
-    """Géocoder l'adresse pour obtenir la latitude et la longitude."""
-    geolocator = Nominatim(user_agent="geoapiExercises")
-    location = geolocator.geocode(address)
-    if location:
-        return location.latitude, location.longitude
-    else:
-        return None, None
+        """Géocoder l'adresse pour obtenir la latitude et la longitude."""
+        try:
+            geolocator = Nominatim(user_agent="geoapiExercises")
+            location = geolocator.geocode(address)
+            if location:
+                return location.latitude, location.longitude
+            else:
+                st.error("Adresse non trouvée. Veuillez essayer une adresse différente.")
+                return None, None
+        except Exception as e:
+            st.error(f"Erreur lors du géocodage de l'adresse: {e}")
+            return None, None
 
-@st.cache
+@st.cache_data
 def get_time_series_data(selected_index, gdf):
     """Extraire les données de séries temporelles pour le point sélectionné en utilisant son index."""
     date_columns = gdf.columns[11:374]
@@ -141,17 +134,15 @@ def main():
     # User inputs the address
     address = st.text_input("Entrez une adresse pour zoomer sur la carte", "")
 
-    # Now in your main function, use the calculate_zoom_level function without manually setting zoom to 5
-    # if the address is provided:
+    # If the user has entered an address, we geocode it to get the latitude and longitude
     if address:
         lat, lon = geocode_address(address)
+        zoom = 12  # A fixed zoom level that can be adjusted as needed
+        fig = create_interactive_map(gdf, color_range)
     else:
-        # If no address is provided, calculate the center and zoom to fit all points
-        lat, lon = calculate_bounds(gdf)
-        zoom = calculate_zoom_level(gdf)
+        # If no address is entered, we create the map centered on all data points without a fixed zoom
+        fig = create_interactive_map(gdf, color_range)
 
-    # Create and display the interactive map with the user-defined color range
-    fig = create_interactive_map(gdf, lat, lon, zoom, color_range)
     st.plotly_chart(fig, use_container_width=True)
 
     selected_index = st.selectbox('Sélectionnez un indice de point', gdf.index.tolist())
