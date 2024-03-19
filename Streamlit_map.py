@@ -2,7 +2,6 @@ import streamlit as st
 import geopandas as gpd
 import plotly.express as px
 import pandas as pd
-import math
 from geopy.geocoders import Nominatim
 
 @st.cache_data
@@ -54,11 +53,11 @@ def geocode_address(address):
             return None, None
 
 @st.cache_data
-def get_time_series_data(selected_index, gdf):
+def get_time_series_data(selected_index, _gdf):
     """Extraire les données de séries temporelles pour le point sélectionné en utilisant son index."""
-    date_columns = gdf.columns[11:374]
+    date_columns = _gdf.columns[11:374]
     dates = pd.to_datetime(date_columns, format='%Y%m%d')
-    displacement_values = gdf.iloc[selected_index][date_columns].values
+    displacement_values = _gdf.iloc[selected_index][date_columns].values
 
     ts_data = pd.DataFrame({
         'Date': dates,
