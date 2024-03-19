@@ -17,40 +17,44 @@ def calculate_bounds(gdf):
     center_lon = (bounds[0] + bounds[2]) / 2
     return center_lat, center_lon
 
-def create_interactive_map(gdf, color_range):
-    """Créer une carte interactive avec la plage de couleurs personnalisable."""
-    # Calculate the center of the map
-    center_lat, center_lon = calculate_bounds(gdf)
+def create_interactive_map(gdf, color_range, lat=None, lon=None, zoom=1):
+    """Create an interactive map with customizable color range."""
+    if lat is not None and lon is not None:
+        center_lat, center_lon = lat, lon
+    else:
+        # Calculate the center of the map from gdf if lat/lon not specified
+        center_lat, center_lon = calculate_bounds(gdf)
 
     fig = px.scatter_mapbox(gdf.reset_index(),
                             lat="latitude",
                             lon="longitude",
                             color="slope",
                             color_continuous_scale=px.colors.diverging.RdBu,
-                            range_color=color_range,  # Updated to use the custom range
+                            range_color=color_range,
                             hover_name=gdf.index,
                             hover_data={"index": True, "slope": True},
+                            zoom=zoom,
                             center={"lat": center_lat, "lon": center_lon},
                             height=300)
-    fig.update_layout(mapbox_style="open-street-map")
-    fig.update_layout(margin={"r":0, "t":0, "l":0, "b":0})
+    fig.update_layout(mapbox_style="open-street-map", margin={"r":0, "t":0, "l":0, "b":0})
     fig.update_traces(marker=dict(size=10))
 
     return fig
 
 def geocode_address(address):
-        """Géocoder l'adresse pour obtenir la latitude et la longitude."""
-        try:
-            geolocator = Nominatim(user_agent="geoapiExercises")
-            location = geolocator.geocode(address)
-            if location:
-                return location.latitude, location.longitude
-            else:
-                st.error("Adresse non trouvée. Veuillez essayer une adresse différente.")
-                return None, None
-        except Exception as e:
-            st.error(f"Erreur lors du géocodage de l'adresse: {e}")
+    """Geocode the address to get latitude and longitude."""
+    try:
+        # Ensure you have a unique user_agent
+        geolocator = Nominatim(user_agent="your_unique_app_name")
+        location = geolocator.geocode(address)
+        if location:
+            return location.latitude, location.longitude
+        else:
+            st.error("Adresse non trouvée. Veuillez essayer une adresse différente.")
             return None, None
+    except Exception as e:
+        st.error(f"Erreur lors du géocodage de l'adresse: {e}")
+        return None, None
 
 @st.cache_data
 def get_time_series_data(selected_index, _gdf):
@@ -130,19 +134,26 @@ def main():
         key='color_range'
     )
 
-    # User inputs the address
     address = st.text_input("Entrez une adresse pour zoomer sur la carte", "")
-
-    # If the user has entered an address, we geocode it to get the latitude and longitude
     if address:
         lat, lon = geocode_address(address)
-        zoom = 12  # A fixed zoom level that can be adjusted as needed
-        fig = create_interactive_map(gdf, color_range)
+        if lat is not None and lon is not None:
+            zoom = 12  # Adjust as needed
+            fig = create_interactive_map(gdf, color_range, lat=lat, lon=lon, zoom=zoom)
+        else:
+            # Fallback to a default view if geocoding fails
+            lat, lon = calculate_bounds(gdf)[:2]  # Assuming this returns the center lat, lon
+            zoom = 5  # A more reasonable default zoom
+            fig = create_interactive_map(gdf, color_range, lat=lat, lon=lon, zoom=zoom)
+            st.warning("Could not find the specified address. Showing default map.")
     else:
-        # If no address is entered, we create the map centered on all data points without a fixed zoom
-        fig = create_interactive_map(gdf, color_range)
+        # Handle the case where no address is input
+        lat, lon = calculate_bounds(gdf)[:2]
+        zoom = 7  # Adjust this default zoom level as needed
+        fig = create_interactive_map(gdf, color_range, lat=lat, lon=lon, zoom=zoom)
 
     st.plotly_chart(fig, use_container_width=True)
+
 
     selected_index = st.selectbox('Sélectionnez un indice de point', gdf.index.tolist())
 
@@ -164,17 +175,20 @@ def main():
         )
         # Update axis labels
         st.session_state.ts_fig.update_layout(
-        xaxis_title='Dates',
-        yaxis_title='Déplacement (mm)'
-    )
+            xaxis_title='Dates',
+            yaxis_title='Déplacement (mm)'
+        )
+
+    # Always check and show the time series plot if it exists in the session state
+    if 'ts_fig' in st.session_state and st.session_state.ts_fig is not None:
         st.plotly_chart(st.session_state.ts_fig, use_container_width=True)
 
     # Check if ts_data is available to set up the multiselect widget
     if 'ts_data' in st.session_state and st.session_state.ts_data is not None:
         years_to_plot = st.multiselect(
             'Choisissez les années à afficher',
-            options=st.session_state.ts_data['Year'].unique(),  # Get unique years from the loaded data
-            default=st.session_state.ts_data['Year'].unique(),  # Set all years as default
+            options=st.session_state.ts_data['Year'].unique(),
+            default=st.session_state.ts_data['Year'].unique(),
             key='years_to_plot'
         )
 
@@ -183,6 +197,7 @@ def main():
             # Filter the data based on the years selected
             filtered_data = st.session_state.ts_data[st.session_state.ts_data['Year'].isin(years_to_plot)]
             st.session_state.trend_fig = plot_annual_trend(filtered_data)
+            # Display the annual trend plot without overwriting the session state for the time series plot
             st.plotly_chart(st.session_state.trend_fig, use_container_width=True)
 
 if __name__ == "__main__":
